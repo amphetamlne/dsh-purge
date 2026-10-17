@@ -2,6 +2,7 @@
 
 import * as core from "../lib/core.js";
 import * as rules from "../lib/rules.js";
+import * as history from "../lib/prompt-history.js";
 
 const args = process.argv.slice(2);
 
@@ -36,16 +37,62 @@ function printStatus(state) {
 }
 
 async function main() {
+  const backupIdx = args.findIndex((a) => a === "--backup" || a === "-b");
+  if (backupIdx >= 0) {
+    const label = args[backupIdx + 1] && !args[backupIdx + 1].startsWith("-") ? args[backupIdx + 1] : "";
+    try {
+      const snap = history.createSnapshot(core.findDshHome(), label);
+      console.log(`✓ 提示词快照已创建: ${snap.filename} (${snap.size} 字节)`);
+      console.log(`  路径: ${snap.path}`);
+    } catch (e) {
+      console.error(`✗ 创建快照失败: ${e.message}`);
+    }
+    return;
+  }
+
+  if (args.includes("--snapshots") || args.includes("--list-backups") || args.includes("-l")) {
+    const list = history.listSnapshots(core.findDshHome());
+    if (list.length === 0) {
+      console.log("暂无任何提示词快照。可使用 'dsh-purge --backup [备注]' 创建。");
+      return;
+    }
+    console.log(`提示词历史快照列表 (共 ${list.length} 个):`);
+    list.forEach((item, i) => {
+      const timeStr = item.mtime.toLocaleString();
+      console.log(`  [${i + 1}] ${item.name.padEnd(45)} ${String(item.size).padStart(6)} 字节  (${timeStr})`);
+    });
+    console.log("\n回滚命令: dsh-purge --rollback <序号或文件名>");
+    return;
+  }
+
+  const rollbackIdx = args.findIndex((a) => a === "--rollback");
+  if (rollbackIdx >= 0) {
+    const target = args[rollbackIdx + 1] && !args[rollbackIdx + 1].startsWith("-") ? args[rollbackIdx + 1] : 1;
+    try {
+      const result = history.rollbackToSnapshot(core.findDshHome(), target);
+      console.log(`✓ 提示词已成功无损回滚！`);
+      console.log(`  来源版本: ${result.restoredFrom}`);
+      console.log(`  写入文件: ${result.targetFile} (${result.size} 字节)`);
+      console.log(`  * 回滚前已自动保存当前版本至快照库，防止误操作。`);
+    } catch (e) {
+      console.error(`✗ 回滚失败: ${e.message}`);
+    }
+    return;
+  }
+
   const mode = args.find((a) => ["--apply", "--revert", "--uninstall", "--status", "--edit", "--help"].includes(a));
 
   if (mode === "--help" || args.includes("-h")) {
     console.log(`dsh-purge 用法:
-  dsh-purge --status     显示状态
-  dsh-purge --apply      应用全部清洗（提示词+代码+shim+override）
-  dsh-purge --revert     回滚还原
-  dsh-purge --uninstall  卸载插件（已应用则先还原）
-  dsh-purge --edit       编辑注入文件 prompt-inject.md
-  dsh-purge --help       帮助`);
+  dsh-purge --status              显示状态
+  dsh-purge --backup [备注]       保存当前提示词快照 (无损备份)
+  dsh-purge --snapshots           查看提示词历史快照列表
+  dsh-purge --rollback [序号]     一键无损回滚提示词至指定快照 (默认上一版)
+  dsh-purge --apply               应用全部清洗（提示词+代码+shim+override）
+  dsh-purge --revert              回滚还原
+  dsh-purge --uninstall           卸载插件（已应用则先还原）
+  dsh-purge --edit                编辑注入文件 prompt-inject.md
+  dsh-purge --help                帮助`);
     return;
   }
 
