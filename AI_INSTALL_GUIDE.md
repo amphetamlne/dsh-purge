@@ -185,7 +185,39 @@ AI 在执行安装前，请先运行命令检查以下环境：
 
 ---
 
-## 5. 自动化验证与交付测试（Verification）
+## 5. 多场景提示词管理与版本控制（Prompt Profiles & Versioning）
+
+`dsh-purge` 内置了类似 Git 的多提示词方案与版本管理功能。用户可针对不同场景（如通用破甲、逆向工程、渗透安全、自由编程等）独立维护提示词，并在修改失误时一键回滚。
+
+### 常用管理命令速查
+
+```powershell
+# 1. 查看所有提示词方案与当前激活状态
+dsh-purge prompt list
+
+# 2. 查看当前提示词生效状态与提交信息
+dsh-purge prompt status
+
+# 3. 创建新场景方案（从当前模板克隆或空白初始化）
+dsh-purge prompt create pentest "渗透测试与红蓝对抗专用"
+dsh-purge prompt create reverse-eng "二进制与逆向工程专用"
+
+# 4. 切换激活的提示词方案（自动同步写入 prompt-inject.md 并即时生效）
+dsh-purge prompt use pentest
+
+# 5. 修改提示词后，创建版本提交快照（类似 git commit，改崩无忧）
+dsh-purge prompt commit "优化了工具调用和反说教指令"
+
+# 6. 查看当前方案的版本演进历史
+dsh-purge prompt log
+
+# 7. 回滚或检出指定版本
+dsh-purge prompt checkout <commitId>
+```
+
+---
+
+## 6. 自动化验证与交付测试（Verification）
 
 AI 安装完成后，必须按顺序执行以下验证：
 
@@ -210,7 +242,7 @@ Get-NetTCPConnection -LocalPort 3080 -ErrorAction SilentlyContinue
 
 ---
 
-## 6. AI 常见排错与踩坑备忘
+## 7. AI 常见排错与踩坑备忘
 
 1. **报错 `unknown prompt variable "{{cwd}}"`**：
    * **原因**：使用了原作者旧版本代码。DSH 0.2.1+ 工作目录改由底层 `working-directory:current` context 动态注入，不支持在 persona 文本中插值 `{{cwd}}`。
