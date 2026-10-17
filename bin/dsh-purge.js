@@ -96,16 +96,45 @@ async function handlePromptCommand(args) {
     return;
   }
 
+  if (subcmd === "presets") {
+    const presets = pm.getBuiltinPresets();
+    console.log(`系统内置官方场景预设 (共 ${Object.keys(presets).length} 个):`);
+    for (const [k, v] of Object.entries(presets)) {
+      console.log(`  - ${k.padEnd(16)} (${v.length} 字节)`);
+    }
+    console.log("\n基于预设创建新方案: dsh-purge prompt create <新方案名> --from <预设名>");
+    return;
+  }
+
   if (subcmd === "create" || subcmd === "new") {
     const name = args[1];
     if (!name) {
-      console.error("用法错误: 请提供新方案名称，如: dsh-purge prompt create pentest");
+      console.error("用法错误: 请提供新方案名称，如: dsh-purge prompt create my-profile");
       process.exit(1);
     }
     const fromEmpty = args.includes("--empty");
-    const content = fromEmpty ? "# Custom System Prompt\n" : (core.readPromptInjectFileSync(home) || "");
+    const fromIdx = args.indexOf("--from");
+    let content = "";
+    let initMsg = "Initial commit";
+    if (fromEmpty) {
+      content = "# Custom System Prompt\n";
+      initMsg = "Initial commit: 空白初始化";
+    } else if (fromIdx >= 0 && args[fromIdx + 1]) {
+      const presetKey = args[fromIdx + 1];
+      const presets = pm.getBuiltinPresets();
+      if (presets[presetKey]) {
+        content = presets[presetKey];
+        initMsg = `Initial commit from preset: ${presetKey}`;
+      } else {
+        console.error(`未找到预设: ${presetKey}。可用预设: ${Object.keys(presets).join(", ")}`);
+        process.exit(1);
+      }
+    } else {
+      content = core.readPromptInjectFileSync(home) || "";
+      initMsg = "Initial commit from current template";
+    }
     try {
-      const created = pm.createProfile(home, name, content, "Initial commit from current template");
+      const created = pm.createProfile(home, name, content, initMsg);
       console.log(`✓ 提示词方案 "${created.name}" 创建成功！`);
       console.log(`  初始版本: ${created.commit.id} (${created.commit.size} 字节)`);
       console.log(`  立即切换使用: dsh-purge prompt use ${created.name}`);

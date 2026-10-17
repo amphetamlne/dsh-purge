@@ -192,26 +192,32 @@ AI 在执行安装前，请先运行命令检查以下环境：
 ### 常用管理命令速查
 
 ```powershell
-# 1. 查看所有提示词方案与当前激活状态
+# 1. 查看所有提示词方案与当前激活状态（内置 all-in-one, reverse-eng, pentest, coding）
 dsh-purge prompt list
 
 # 2. 查看当前提示词生效状态与提交信息
 dsh-purge prompt status
 
-# 3. 创建新场景方案（从当前模板克隆或空白初始化）
-dsh-purge prompt create pentest "渗透测试与红蓝对抗专用"
-dsh-purge prompt create reverse-eng "二进制与逆向工程专用"
+# 3. 查看系统内置官方场景预设
+dsh-purge prompt presets
 
 # 4. 切换激活的提示词方案（自动同步写入 prompt-inject.md 并即时生效）
+dsh-purge prompt use reverse-eng
 dsh-purge prompt use pentest
+dsh-purge prompt use coding
+dsh-purge prompt use all-in-one
 
-# 5. 修改提示词后，创建版本提交快照（类似 git commit，改崩无忧）
+# 5. 基于内置预设或当前模板创建新方案
+dsh-purge prompt create my-sec --from pentest
+dsh-purge prompt create my-re --from reverse-eng
+
+# 6. 修改提示词后，创建版本提交快照（类似 git commit，改崩无忧）
 dsh-purge prompt commit "优化了工具调用和反说教指令"
 
-# 6. 查看当前方案的版本演进历史
+# 7. 查看当前方案的版本演进历史
 dsh-purge prompt log
 
-# 7. 回滚或检出指定版本
+# 8. 回滚或检出指定版本
 dsh-purge prompt checkout <commitId>
 ```
 
