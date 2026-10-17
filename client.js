@@ -1372,6 +1372,10 @@ body:not([data-ds-dark-theme]) .dshp-auth-ops button.primary{background:var(--ds
 			const [override, setOverride] = useState("");
 			const [defaultOverride, setDefaultOverride] = useState("");
 			const [overrideLoaded, setOverrideLoaded] = useState(false);
+			const [profiles, setProfiles] = useState([]);
+			const [activeProfile, setActiveProfile] = useState("reverse-eng");
+			const [activeVersion, setActiveVersion] = useState("latest");
+			const [commitBusy, setCommitBusy] = useState(false);
 			const [ownServers, setOwnServers] = useState("");
 			const [ownLoaded, setOwnLoaded] = useState(false);
 			const [patchBusy, setPatchBusy] = useState(false);
@@ -1589,7 +1593,72 @@ body:not([data-ds-dark-theme]) .dshp-auth-ops button.primary{background:var(--ds
 						}
 					})
 					.catch(() => {});
+				apiJson("/dsh-purge/prompt/profiles")
+					.then((d) => {
+						if (d && d.ok) {
+							if (Array.isArray(d.profiles)) setProfiles(d.profiles);
+							if (d.active && d.active.name) {
+								setActiveProfile(d.active.name);
+								setActiveVersion(d.active.version || "latest");
+							}
+						}
+					})
+					.catch(() => {});
 			}, []);
+
+			const onSwitchProfile = (name) => {
+				if (!name || name === activeProfile) return;
+				setNotice({ kind: "idle", text: "正在切换方案..." });
+				apiJson("/dsh-purge/prompt/use", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ name }),
+				})
+					.then((d) => {
+						if (d && d.ok) {
+							setActiveProfile(d.active.name);
+							setActiveVersion(d.active.version || "latest");
+							if (typeof d.content === "string") {
+								overrideRef.current = d.content;
+								setOverride(d.content);
+							}
+							if (Array.isArray(d.profiles)) setProfiles(d.profiles);
+							setNotice({ kind: "success", text: "已切换方案: " + d.active.name });
+						}
+					})
+					.catch((e) => {
+						setNotice({ kind: "error", text: "切换方案失败: " + e.message });
+					});
+			};
+
+			const onCommitPrompt = () => {
+				const msg = window.prompt("请输入本次修改的提交备注（类似 Git commit message）:", "优化提示词");
+				if (msg === null) return;
+				const trimmed = msg.trim() || "Update prompt";
+				setCommitBusy(true);
+				setNotice({ kind: "idle", text: "正在提交版本快照..." });
+				apiJson("/dsh-purge/prompt/commit", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ message: trimmed, content: readPromptBox() }),
+				})
+					.then((d) => {
+						setCommitBusy(false);
+						if (d && d.ok) {
+							if (d.result && d.result.alreadyClean) {
+								setNotice({ kind: "idle", text: d.result.message });
+							} else {
+								setNotice({ kind: "success", text: "✓ 已成功提交新版本: " + ((d.result && d.result.commit && d.result.commit.id) || "") });
+								if (Array.isArray(d.profiles)) setProfiles(d.profiles);
+								if (d.active) setActiveVersion(d.active.version || "latest");
+							}
+						}
+					})
+					.catch((e) => {
+						setCommitBusy(false);
+						setNotice({ kind: "error", text: "提交失败: " + e.message });
+					});
+			};
 
 			useEffect(() => {
 				loadAll();
@@ -1985,10 +2054,36 @@ body:not([data-ds-dark-theme]) .dshp-auth-ops button.primary{background:var(--ds
 				// h(ContinueRetrySection, null),
 				h("div", { className: "dshp-sub" },
 					h("h4", null, t("override.title")),
-					h("div", { className: "dshp-row", style: { margin: 0 } },
-						h(Btn, { kind: "primary", tiny: true, disabled: patchBusy || !overrideLoaded, onClick: saveOverride }, t("btn.saveInject")),
-						h(Btn, { tiny: true, disabled: patchBusy || !overrideLoaded || !defaultOverride, onClick: restoreOverride }, t("btn.restoreInject")),
+					h("div", { className: "dshp-row", style: { margin: 0, gap: 6 } },
+						h(Btn, { kind: "primary", tiny: true, disabled: patchBusy || commitBusy || !overrideLoaded, onClick: saveOverride }, t("btn.saveInject")),
+						h(Btn, { tiny: true, disabled: patchBusy || commitBusy || !overrideLoaded, onClick: onCommitPrompt, title: "提交当前方案的新版本快照（类似 git commit）" }, "提交版本"),
+						h(Btn, { tiny: true, disabled: patchBusy || commitBusy || !overrideLoaded || !defaultOverride, onClick: restoreOverride }, t("btn.restoreInject")),
 					),
+				),
+				h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "6px 0", flexWrap: "wrap", gap: "6px" } },
+					h("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
+						h("span", { style: { fontSize: "12px", color: "var(--dshp-mute, #888)" } }, "场景方案:"),
+						h("select", {
+							value: activeProfile,
+							disabled: patchBusy || commitBusy,
+							onChange: (e) => onSwitchProfile(e.target.value),
+							style: {
+								padding: "3px 6px",
+								fontSize: "12px",
+								borderRadius: "4px",
+								background: "color-mix(in srgb, var(--dshp-ink, #000) 6%, transparent)",
+								color: "inherit",
+								border: "1px solid color-mix(in srgb, var(--dshp-ink, #000) 15%, transparent)",
+								cursor: "pointer",
+								outline: "none"
+							}
+						},
+							(profiles && profiles.length > 0 ? profiles : [{ name: activeProfile }]).map((p) =>
+								h("option", { key: p.name, value: p.name, style: { background: "var(--dshp-panel, #222)", color: "var(--dshp-ink, #eee)" } }, p.name + (p.name === activeProfile ? " [当前生效]" : ""))
+							)
+						),
+					),
+					h("span", { style: { fontSize: "11px", color: "var(--dshp-mute, #888)" } }, "版本: " + activeVersion)
 				),
 				h("textarea", {
 					className: "dshp-area",
